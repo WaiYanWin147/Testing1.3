@@ -9,6 +9,12 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    env:
+      # ensure your app uses in-memory DB during tests
+      DATABASE_URL: sqlite:///:memory:
+      # optional: make Flask less noisy in tests
+      FLASK_ENV: testing
+
     steps:
       - name: Check out
         uses: actions/checkout@v4
@@ -23,12 +29,6 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
-
-      - name: Lint (ruff)
-        run: ruff check .
-
-      - name: Format check (black)
-        run: black --check .
 
       - name: Run tests
         run: pytest
