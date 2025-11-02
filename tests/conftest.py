@@ -2,8 +2,11 @@ import os
 import sys
 import types
 import pytest
-from importlib.abc import MetaPathFinder, Loader
-from importlib.machinery import ModuleSpec
+from pathlib import Path
+
+# CRITICAL: Add project root to Python path so 'app' module can be found
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 
 class StubModule:
@@ -12,13 +15,19 @@ class StubModule:
         self.__name__ = name
         self.__package__ = name.rpartition('.')[0]
         self.__path__ = []
+        self.__file__ = f"<stub {name}>"
         
     def __getattr__(self, name):
         # Return a simple stub class/function for any attribute access
-        return type(name, (), {})
+        stub_class = type(name, (), {
+            '__init__': lambda self, *args, **kwargs: None,
+            '__call__': lambda self, *args, **kwargs: None,
+            '__repr__': lambda self: f'<Stub {name}>',
+        })
+        return stub_class
 
 
-class DynamicStubFinder(MetaPathFinder):
+class DynamicStubFinder:
     """Dynamically stubs missing modules to prevent ImportError."""
     
     STUB_PATTERNS = [
@@ -29,41 +38,40 @@ class DynamicStubFinder(MetaPathFinder):
     def find_spec(self, fullname, path, target=None):
         # Check if this module should be stubbed
         if any(fullname.startswith(pattern) for pattern in self.STUB_PATTERNS):
-            return ModuleSpec(fullname, DynamicStubLoader(), origin="stub")
+            return types.SimpleNamespace(
+                name=fullname,
+                loader=self,
+                origin="stub",
+                submodule_search_locations=[]
+            )
         
         # Stub app.config with actual Config class
         if fullname == "app.config":
-            return ModuleSpec(fullname, ConfigLoader(), origin="stub")
+            return types.SimpleNamespace(
+                name=fullname,
+                loader=self,
+                origin="stub-config",
+                submodule_search_locations=[]
+            )
         
         return None
-
-
-class DynamicStubLoader(Loader):
-    """Loader that creates stub modules."""
     
     def create_module(self, spec):
+        if spec.origin == "stub-config":
+            return None  # Use default module
         return StubModule(spec.name)
     
     def exec_module(self, module):
-        # Module is already initialized in create_module
-        pass
-
-
-class ConfigLoader(Loader):
-    """Special loader for app.config that provides actual Config class."""
-    
-    def create_module(self, spec):
-        return None  # Use default module creation
-    
-    def exec_module(self, module):
-        class Config:
-            SECRET_KEY = "test-secret-key"
-            SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", "sqlite:///:memory:")
-            SQLALCHEMY_TRACK_MODIFICATIONS = False
-            TESTING = True
-            WTF_CSRF_ENABLED = False
-        
-        module.Config = Config
+        if module.__name__ == "app.config":
+            class Config:
+                SECRET_KEY = "test-secret-key-for-testing"
+                SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", "sqlite:///:memory:")
+                SQLALCHEMY_TRACK_MODIFICATIONS = False
+                TESTING = True
+                WTF_CSRF_ENABLED = False
+            
+            module.Config = Config
+        # For stub modules, they're already initialized
 
 
 # Install the stub finder BEFORE any app imports
