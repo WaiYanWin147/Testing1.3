@@ -1,10 +1,6 @@
-# tests/conftest.py
-import os
-import sys
-import types
-import pytest
+import os, sys, types, pytest
 
-# --- Dynamic stub importer for any missing app.entity/* or app.control/* ---
+# --- Dynamically stub any missing imports your app does at import time ---
 class _StubLoader:
     def find_spec(self, fullname, path, target=None):
         if fullname.startswith("app.entity.") or fullname.startswith("app.control."):
@@ -12,42 +8,29 @@ class _StubLoader:
         if fullname == "app.config":
             return types.SimpleNamespace(loader=self, origin="stub")
         return None
-
-    def create_module(self, spec):
-        return None  # use exec_module
-
+    def create_module(self, spec): return None
     def exec_module(self, module):
-        name = module.__name__
-        if name == "app.config":
-            # Provide a minimal Config so your factory can import it
+        if module.__name__ == "app.config":
             class Config:
                 SECRET_KEY = "test"
                 SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", "sqlite://")
                 SQLALCHEMY_TRACK_MODIFICATIONS = False
                 TESTING = True
-            module.Config = Config
+            module.Config = Config  # provide Config for app factory
             return
+        # otherwise leave stub module empty
 
-        # For app.entity.* or app.control.* just provide an empty module
-        # (you can add attributes here later if a route actually uses them)
-        pass
-
-# Install the stub loader
 sys.meta_path.insert(0, _StubLoader())
 
-# Now it's safe to import your app factory
-from app import create_app  # noqa: E402
-
+from app import create_app  # safe after stubs are in place
 
 @pytest.fixture
-def client(tmp_path, monkeypatch):
-    # Temporary SQLite DB file for the test run
+def client(tmp_path):
     db_file = tmp_path / "test.db"
     os.environ["DATABASE_URL"] = f"sqlite:///{db_file}"
-
     app = create_app()
 
-    # Minimal in-memory templates so render_template works in smoke tests
+    # Minimal in-memory templates so render_template() works
     from jinja2 import DictLoader
     app.jinja_loader = DictLoader({
         "index.html": "<h1>Home</h1>",
