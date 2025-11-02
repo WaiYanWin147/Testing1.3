@@ -1,2 +1,22 @@
 [pytest]
-addopts = -q --maxfail=1 --cov=app --cov-report=term-missing
+# Pytest configuration for Flask app testing
+
+# Test discovery
+testpaths = tests
+python_files = test_*.py
+python_classes = Test*
+python_functions = test_*
+
+# Options
+addopts = 
+    -q
+    --maxfail=1
+    --disable-warnings
+    --tb=short
+    -v
+
+# Coverage (if using pytest-cov)
+# addopts = -q --maxfail=1 --cov=app --cov-report=term-missing
+
+# Python path (helps pytest find 'app' module)
+pythonpath = .
